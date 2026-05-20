@@ -1,0 +1,145 @@
+-- ============================================================
+-- BRONZE LAYER - LOAD SCRIPT
+-- ============================================================
+
+SET GLOBAL local_infile = 1;
+SET @batch_start = NOW();
+
+SELECT '🚀 Starting Bronze Layer Load...' AS status;
+
+-- ============================================================
+-- CRM TABLES
+-- ============================================================
+SELECT '📂 Loading CRM Tables...' AS status;
+
+-- 1. crm_cust_info
+SET @start = NOW();
+TRUNCATE TABLE bronze.crm_cust_info;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_crm/cust_info.csv'
+INTO TABLE bronze.crm_cust_info
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.crm_cust_info);
+
+SELECT
+    'bronze.crm_cust_info' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+SHOW WARNINGS;
+
+-- 2. crm_prd_info
+SET @start = NOW();
+TRUNCATE TABLE bronze.crm_prd_info;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_crm/prd_info.csv'
+INTO TABLE bronze.crm_prd_info
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.crm_prd_info);
+
+SELECT
+    'bronze.crm_prd_info' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+SHOW WARNINGS;
+
+-- 3. crm_sales_details
+SET @start = NOW();
+TRUNCATE TABLE bronze.crm_sales_details;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_crm/sales_details.csv'
+INTO TABLE bronze.crm_sales_details
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.crm_sales_details);
+
+SELECT
+    'bronze.crm_sales_details' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+
+SHOW WARNINGS;
+
+-- ============================================================
+-- ERP TABLES
+-- ============================================================
+SELECT '📂 Loading ERP Tables...' AS status;
+
+-- 4. erp_cust_az12
+SET @start = NOW();
+TRUNCATE TABLE bronze.erp_cust_az12;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_erp/cust_az12.csv'
+INTO TABLE bronze.erp_cust_az12
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.erp_cust_az12);
+
+SELECT
+    'bronze.erp_cust_az12' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+
+SHOW WARNINGS;
+
+-- 5. erp_loc_a101
+SET @start = NOW();
+TRUNCATE TABLE bronze.erp_loc_a101;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_erp/loc_a101.csv'
+INTO TABLE bronze.erp_loc_a101
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.erp_loc_a101);
+
+SELECT
+    'bronze.erp_loc_a101' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+SHOW WARNINGS;
+
+-- 6. erp_px_cat_g1v2
+SET @start = NOW();
+TRUNCATE TABLE bronze.erp_px_cat_g1v2;
+
+LOAD DATA LOCAL INFILE '/Users/gomem/Documents/Data analytics/sql-data-warehouse-project/datasets/source_erp/px_cat_g1v2.csv'
+INTO TABLE bronze.erp_px_cat_g1v2
+FIELDS TERMINATED BY ',' ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS;
+
+SET @rows = (SELECT COUNT(*) FROM bronze.erp_px_cat_g1v2);
+
+SELECT
+    'bronze.erp_px_cat_g1v2' AS table_name,
+    IF(@rows > 0, '✅ Loaded', '❌ 0 rows — check file!') AS status,
+    @rows AS rows_loaded,
+    TIMEDIFF(NOW(), @start) AS duration;
+
+SHOW WARNINGS;
+
+-- ============================================================
+-- FINAL SUMMARY
+-- ============================================================
+
+SELECT
+    '🎉 Bronze Layer Load Complete!' AS status,
+    @batch_start AS started_at,
+    NOW() AS completed_at,
+    TIMEDIFF(NOW(), @batch_start) AS total_duration;
