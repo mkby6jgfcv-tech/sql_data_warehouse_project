@@ -34,8 +34,7 @@ IGNORE 1 ROWS
 	@cst_lastname,
 	@cst_marital_status,
 	@cst_gndr,
-	@cst_create_date,
-	@dwh_create_date
+	@cst_create_date
 )
 
 SET
@@ -45,8 +44,7 @@ SET
 	cst_lastname = NULLIF(@cst_lastname, ''),
 	cst_marital_status = NULLIF(@cst_marital_status, ''),
 	cst_gndr = NULLIF(@cst_gndr, ''),
-    cst_create_date = STR_TO_DATE(NULLIF(TRIM(@cst_create_date), ''), '%Y-%m-%d'),
-	dwh_create_date = NULLIF(@dwh_create_date, '');
+    cst_create_date = STR_TO_DATE(NULLIF(TRIM(@cst_create_date), ''), '%Y-%m-%d');
 
 SET @rows_1 = (SELECT COUNT(*) FROM bronze.crm_cust_info);
 SET @dur_1 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_1, NOW(6))/1000,' ','ms');
@@ -68,8 +66,7 @@ IGNORE 1 ROWS
 	@prd_cost,
 	@prd_line,
 	@prd_start_dt,
-	@prd_end_dt,
-	@dwh_create_date
+	@prd_end_dt
 )
 SET
 	prd_id = NULLIF(@prd_id, ''),
@@ -78,8 +75,7 @@ SET
 	prd_cost = NULLIF(@prd_cost, ''),
 	prd_line = NULLIF(@prd_line, ''),
     prd_start_dt = STR_TO_DATE(NULLIF(TRIM(@prd_start_dt), ''), '%Y-%m-%d'),
-    prd_end_dt = STR_TO_DATE(NULLIF(TRIM(@prd_end_dt), ''), '%Y-%m-%d'),
-	dwh_create_date = NULLIF(@dwh_create_date, '');
+    prd_end_dt = STR_TO_DATE(NULLIF(TRIM(@prd_end_dt), ''), '%Y-%m-%d');
 
 SET @rows_2 = (SELECT COUNT(*) FROM bronze.crm_prd_info);
 SET @dur_2 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_2, NOW(6))/1000,' ','ms');
@@ -103,8 +99,7 @@ IGNORE 1 ROWS
 	@sls_due_dt,
 	@sls_sales,
 	@sls_quantity,
-	@sls_price,
-	@dwh_create_date
+	@sls_price
 )
 SET
 
@@ -116,8 +111,7 @@ SET
 	sls_due_dt = NULLIF(@sls_due_dt,''),
 	sls_sales = NULLIF(@sls_sales,''),
 	sls_quantity = NULLIF(@sls_quantity,''),
-	sls_price = NULLIF(@sls_price,''),
-	dwh_create_date = NULLIF(@dwh_create_date,'');
+	sls_price = NULLIF(@sls_price,'');
     
 SET @rows_3 = (SELECT COUNT(*) FROM bronze.crm_sales_details);
 SET @dur_3 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_3, NOW(6))/1000,' ','ms');
@@ -140,14 +134,12 @@ IGNORE 1 ROWS
 (
 	@cid,
 	@bdate,
-	@gen,
-	@dwh_create_date
+	@gen
 )
 SET
 	cid = NULLIF(@cid,''),
 	bdate = NULLIF(@bdate,''),
-	gen = NULLIF(@gen,''),
-	dwh_create_date = NULLIF(@dwh_create_date,'');
+	gen = NULLIF(@gen,'');
 
 SET @rows_4 = (SELECT COUNT(*) FROM bronze.erp_cust_az12);
 SET @dur_4 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_4, NOW(6))/1000,' ','ms');
@@ -164,13 +156,11 @@ LINES TERMINATED BY '\n'
 IGNORE 1 ROWS
 (
 	@cid,
-	@cntry,
-	@dwh_create_date
+	@cntry
 )
 SET
 	cid = NULLIF(@cid,''),
-	cntry = NULLIF(@cntry,''),
-	dwh_create_date = NULLIF(@dwh_create_date,'');
+	cntry = NULLIF(@cntry,'');
     
 SET @rows_5 = (SELECT COUNT(*) FROM bronze.erp_loc_a101);
 SET @dur_5 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_5, NOW(6))/1000,' ','ms');
@@ -189,16 +179,14 @@ IGNORE 1 ROWS
 	@id,
 	@cat,
 	@subcat,
-	@maintenance,
-	@dwh_create_date
+	@maintenance
 )
 SET
 
 	id = NULLIF(@id,''),
 	cat = NULLIF(@cat,''),
 	subcat = NULLIF(@subcat,''),
-	maintenance = NULLIF(@maintenance,''),
-	dwh_create_date = NULLIF(@dwh_create_date,'');
+	maintenance = NULLIF(@maintenance,'');
     
 SET @rows_6 = (SELECT COUNT(*) FROM bronze.erp_px_cat_g1v2);
 SET @dur_6 = CONCAT(TIMESTAMPDIFF(MICROSECOND,@start_6, NOW(6))/1000,' ','ms');
