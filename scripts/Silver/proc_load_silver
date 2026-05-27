@@ -1,0 +1,289 @@
+-- ============================================================
+-- Silver Layer — Load Script
+-- Description: Loads cleaned data from Bronze layer tables into Silver layer tables
+-- Author:       Gomem
+-- Created:      2026-05-28
+-- ============================================================
+
+DROP PROCEDURE IF EXISTS silver.load_silver;
+DELIMITER //
+CREATE PROCEDURE silver.load_silver()
+BEGIN
+    -- ========================================================
+    -- Variable Declarations
+    -- ========================================================
+	DECLARE v_batch_start_time DATETIME(6);
+    DECLARE v_batch_end_time DATETIME(6);
+	DECLARE v_start_time DATETIME(6);
+    DECLARE v_end_time DATETIME(6);
+    
+    DECLARE v_row_count INT DEFAULT 0;
+    DECLARE v_total_rows INT DEFAULT 0;
+    
+    DECLARE v_error_message TEXT;
+    DECLARE v_sql_state VARCHAR(50);
+	DECLARE v_errno INT;
+    
+    -- ========================================================
+    -- Error Handler
+    -- ========================================================
+	DECLARE EXIT HANDLER FOR SQLEXCEPTION
+		BEGIN
+		GET DIAGNOSTICS CONDITION 1
+			v_error_message = MESSAGE_TEXT,
+			v_sql_state = RETURNED_SQLSTATE,
+			v_errno = MYSQL_ERRNO;
+		
+		SELECT
+			NOW() AS log_time,
+			'silver_load' AS procedure_name,
+			'Failed' AS status,
+			'ERROR OCCURRED DURING SILVER LOAD' AS message,
+			v_error_message AS error_message,
+			v_sql_state AS sql_state,
+			v_errno AS error_number;
+	END;
+    -- ========================================================
+    -- Batch Start
+    -- ========================================================
+    
+    SET v_batch_start_time = NOW(6);
+    
+    DROP TEMPORARY TABLE IF EXISTS temp_load_log;
+    CREATE TEMPORARY TABLE temp_load_log (
+    source_name VARCHAR(50),
+    table_name VARCHAR(50),
+    table_status VARCHAR(50),
+    rows_count INT,
+    duration_ms BIGINT
+    );
+	-- =======================================
+	-- CRM 
+	-- =======================================
+	-- 1. crm_cust_info
+    SET v_start_time = NOW(6);
+	TRUNCATE TABLE silver.crm_cust_info;
+	INSERT INTO silver.crm_cust_info
+	(
+	cst_id,
+	cst_key,
+	cst_firstname,
+	cst_lastname,
+	cst_marital_status,
+	cst_gndr,
+	cst_create_date)
+
+	SELECT
+	cst_id,
+	cst_key,
+	TRIM(cst_firstname) AS cst_firstname, -- Data Cleansing: Removing unwanted spaces
+	TRIM(cst_lastname) AS cst_lastname, -- Data Cleansing: Removing unwanted spaces
+	CASE WHEN UPPER(TRIM(cst_marital_status)) = 'S' THEN 'Single' -- Data Normalization &standardization: Standardize marital status values
+		WHEN UPPER(TRIM(cst_marital_status)) = 'M' THEN 'Married'
+		ELSE 'n/a' -- Data Cleansing: Handling missing values
+	 END AS cst_marital_status,
+	CASE WHEN UPPER(TRIM(cst_gndr)) = 'F' THEN 'Female'-- Data Normalization &standardization:Standardize marital gender values
+		WHEN UPPER(TRIM(cst_gndr)) = 'M' THEN 'Male'
+		ELSE 'n/a' -- Data Cleansing: Handling missing values
+	 END AS cst_gndr,
+	cst_create_date
+	FROM (
+	-- Keep only latest record from each customer
+	SELECT
+		*,
+		ROW_NUMBER() OVER (PARTITION BY cst_id ORDER BY cst_create_date  DESC) AS flag_last
+	FROM bronze.crm_cust_info -- Data Cleansing: Handling NULLs
+	WHERE cst_id IS NOT NULL) AS subquery
+	-- Select latest valid customers
+	WHERE flag_last = 1;-- Data Cleansing: Removed duplicates
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_end_time = NOW(6);
+    SET v_total_rows = v_total_rows + v_row_count;
+    
+    INSERT INTO temp_load_log
+    VALUES ('CRM','silver.crm_cust_info','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));
+    
+
+	-- 2. crm_prd_info
+    SET v_start_time = NOW(6); 
+	TRUNCATE TABLE silver.crm_prd_info;
+	INSERT INTO silver.crm_prd_info
+	(
+		prd_id,
+		cat_id,
+		prd_key,
+		prd_nm,
+		prd_cost,
+		prd_line,
+		prd_start_dt,
+		prd_end_dt
+	)
+	SELECT
+		prd_id,
+		REPLACE(SUBSTRING(prd_key,1,5),'-','_') AS cat_id,-- Derived columns: Extract category id
+		SUBSTRING(prd_key,7) AS prd_key,-- Derived columns: Extract product key
+		prd_nm,
+		IFNULL(prd_cost,0) AS prd_cost,-- Data Cleansing: Handling Nulls
+		CASE UPPER(TRIM(prd_line))
+		WHEN 'M' THEN 'Mountain' -- Data Normalization &standardization: Map product line codes to descriptive values
+		WHEN 'R' THEN 'Road'
+		WHEN 'S' THEN 'Other Sales'
+		WHEN 'T' THEN 'Touring'
+		ELSE 'n/a' -- Data Cleansing: Handling missing values
+		END AS prd_line,
+		DATE(prd_start_dt) AS prd_start_dt,
+		DATE(
+			DATE_SUB(
+				LEAD(prd_start_dt) OVER (PARTITION BY prd_key ORDER BY prd_start_dt), INTERVAL 1 DAY
+                )
+			) AS prd_end_dt -- Data enrichment:Calculate the end date as 1 day before next startdate
+	FROM bronze.crm_prd_info;
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_total_rows = v_total_rows + v_row_count;
+    SET v_end_time = NOW(6);
+    
+    INSERT INTO temp_load_log
+    VALUES ('CRM','silver.crm_prd_info','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));
+
+	-- 3. crm_sales_details
+    SET v_start_time = NOW(6); 
+	TRUNCATE TABLE silver.crm_sales_details;
+	INSERT INTO silver.crm_sales_details (
+		sls_ord_num,
+		sls_prd_key,
+		sls_cust_id,
+		sls_order_dt,
+		sls_ship_dt,
+		sls_due_dt,
+		sls_sales,
+		sls_quantity,
+		sls_price
+	)
+	SELECT
+		sls_ord_num,
+		sls_prd_key,
+		sls_cust_id,
+		CASE WHEN sls_order_dt = 0 OR length(sls_order_dt) != 8 THEN NULL -- Handling invalid data
+			 ELSE STR_TO_DATE(CAST(sls_order_dt AS CHAR),'%Y%m%d')
+		END AS sls_order_dt,
+		
+		CASE WHEN sls_ship_dt = 0 OR length(sls_ship_dt) != 8 THEN NULL -- Handling invalid data
+			 ELSE STR_TO_DATE(CAST(sls_ship_dt AS CHAR),'%Y%m%d')
+		END AS sls_ship_dt,
+		
+		CASE WHEN sls_due_dt = 0 OR length(sls_due_dt) != 8 THEN NULL -- Handling invalid data
+			 ELSE STR_TO_DATE(CAST(sls_due_dt AS CHAR),'%Y%m%d')
+		END AS sls_due_dt,
+		
+		CASE WHEN sls_sales <= 0 OR sls_sales IS NULL OR sls_sales != sls_quantity * ABS(sls_price)
+				THEN sls_quantity * ABS(sls_price) -- Recalculate sales if original value is missing or incorrect
+			 ELSE sls_sales
+		END AS sls_sales,
+		sls_quantity,
+		CASE WHEN sls_price <= 0 OR sls_price IS NULL -- Recalculate price if original value is missing or incorrect
+				THEN ABS(sls_sales) / NULLIF(sls_quantity,0)
+			 ELSE sls_price
+		END AS sls_price
+	FROM bronze.crm_sales_details;
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_total_rows = v_total_rows + v_row_count;
+    SET v_end_time = NOW(6);
+    
+    INSERT INTO temp_load_log
+    VALUES ('CRM','silver.crm_sales_details','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));
+	-- =======================================
+	-- ERP 
+	-- =======================================
+
+	-- 4. erp_cust_az12
+    SET v_start_time = NOW(6);
+	TRUNCATE TABLE silver.erp_cust_az12;
+	INSERT INTO silver.erp_cust_az12 (
+		cid,
+		bdate,
+		gen
+	)
+	SELECT
+	CASE WHEN cid LIKE 'NAS%' THEN SUBSTRING(cid,4)-- Remove NAS prefix
+		ELSE cid
+	END AS cid,
+	CASE WHEN bdate > CURRENT_DATE THEN NULL -- Remove bdate in future 
+		ELSE bdate
+	END AS bdate,
+	CASE WHEN UPPER(TRIM(gen)) IN ('F','FEMALE') THEN 'Female' -- Normalization and Standardization of gender and unknown values
+		WHEN UPPER(TRIM(gen)) IN ('M','MALE') THEN 'Male'
+		ELSE 'n/a'
+	END AS gen
+	FROM bronze.erp_cust_az12;
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_total_rows = v_total_rows + v_row_count;
+    SET v_end_time = NOW(6);
+    
+    INSERT INTO temp_load_log
+	VALUES ('CRM','silver.erp_cust_az12','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));   
+	-- 5. erp_loc_a101
+    SET v_start_time = NOW(6);
+	TRUNCATE TABLE silver.erp_loc_a101;
+	INSERT INTO silver.erp_loc_a101 (
+	cid,
+	cntry
+	)
+	SELECT
+	REPLACE(cid,'-','') AS cid,-- Remved '-'
+	CASE WHEN UPPER(TRIM(cntry)) = 'DE' THEN 'Germany' -- Data standardization and normalization removed empty space
+		 WHEN UPPER(TRIM(cntry)) IN ('US','USA') THEN 'United States'
+		 WHEN UPPER(TRIM(cntry)) = '' OR cntry IS NULL THEN 'n/a'-- Handled null and missing values
+		 ELSE cntry
+	END AS cntry
+	FROM bronze.erp_loc_a101;
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_total_rows = v_total_rows + v_row_count;
+    SET v_end_time = NOW(6);
+    
+    INSERT INTO temp_load_log
+	VALUES ('CRM','silver.erp_loc_a101','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));
+	-- 6. erp_px_cat_g1v2
+    SET v_start_time = NOW(6);
+	TRUNCATE TABLE silver.erp_px_cat_g1v2;
+	INSERT INTO silver.erp_px_cat_g1v2 (
+		id,
+		cat,
+		subcat,
+		maintenance
+	)
+	SELECT
+		id,
+		cat,
+		subcat,
+		maintenance
+	FROM bronze.erp_px_cat_g1v2;
+    
+    SET v_row_count = ROW_COUNT();
+    SET v_total_rows = v_total_rows + v_row_count;
+    SET v_end_time = NOW(6);
+    
+    INSERT INTO temp_load_log
+	VALUES ('CRM','silver.erp_px_cat_g1v2','Loaded',v_row_count,ROUND(TIMESTAMPDIFF(MICROSECOND,v_start_time,v_end_time)/1000));    
+    -- ========================================================
+    -- Batch End
+    -- ========================================================
+    SET v_batch_end_time = NOW(6);
+    SELECT
+		'Silver load completed' AS status,
+        v_batch_start_time AS batch_start_time,
+        v_batch_end_time AS batch_end_time,
+        TIMESTAMPDIFF(MICROSECOND, v_batch_start_time, v_batch_end_time)/1000 AS total_duration_ms,
+		v_total_rows AS total_rows_loaded;
+    -- ========================================================
+    -- Table Load Summary
+    -- ========================================================
+    SELECT * FROM temp_load_log;
+
+END //
+DELIMITER ;
+CALL silver.load_silver();
